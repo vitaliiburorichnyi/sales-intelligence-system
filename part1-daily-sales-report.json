@@ -1,0 +1,322 @@
+{
+  "name": "1. HubSpot. Reporting",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9,
+              "triggerAtMinute": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -512,
+        -208
+      ],
+      "id": "6dcdaa48-ab12-40a2-9422-153ceafd7c6f",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        -16
+      ],
+      "id": "b5fcb58b-eba9-48f6-9635-1defd6ead672",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "deal",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "properties": [
+            "dealname",
+            "amount",
+            "dealstage",
+            "closedate",
+            "notes_last_updated",
+            "hs_lastmodifieddate",
+            "createdate",
+            "hubspot_owner_id",
+            "hs_next_step",
+            "hs_number_of_overdue_tasks"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        -288,
+        -112
+      ],
+      "id": "71402dc4-29a0-42a7-83d5-614449f1f21d",
+      "name": "Get many deals",
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "CygJrPuZDNmb5yhy",
+          "name": "HubSpot App Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = Date.now();\nconst items = $input.all();\n\nconst stageLabels = {\n  appointmentscheduled: 'Appointment Scheduled',\n  qualifiedtobuy: 'Qualified To Buy',\n  presentationscheduled: 'Presentation Scheduled',\n  decisionmakerboughtin: 'Decision Maker Bought-In',\n  contractsent: 'Contract Sent',\n  closedwon: 'Closed Won',\n  closedlost: 'Closed Lost'\n};\n\nconst stuckStages = ['presentationscheduled', 'decisionmakerboughtin', 'contractsent'];\n\nconst deals = items.map(item => {\n  const p = item.json.properties;\n  const closedate = parseInt(p.closedate?.value || 0);\n  const lastModified = parseInt(p.hs_lastmodifieddate?.value || 0);\n  const daysStale = Math.floor((now - lastModified) / (1000 * 60 * 60 * 24));\n  const daysOverdue = closedate ? Math.floor((now - closedate) / (1000 * 60 * 60 * 24)) : null;\n\n  return {\n    dealId: item.json.dealId,\n    dealname: p.dealname?.value || 'Unknown',\n    amount: parseFloat(p.amount?.value || 0),\n    stage: p.dealstage?.value || 'unknown',\n    stageLabel: stageLabels[p.dealstage?.value] || p.dealstage?.value,\n    closedate: closedate ? new Date(closedate).toISOString().split('T')[0] : null,\n    daysStale,\n    daysOverdue,\n    overdueTasks: parseInt(p.hs_number_of_overdue_tasks?.value || 0),\n    isOverdue: daysOverdue !== null && daysOverdue > 0,\n    isStuck: stuckStages.includes(p.dealstage?.value)\n  };\n});\n\n// Stage breakdown\nconst stageCounts = {};\nconst stageAmounts = {};\ndeals.forEach(d => {\n  stageCounts[d.stageLabel] = (stageCounts[d.stageLabel] || 0) + 1;\n  stageAmounts[d.stageLabel] = (stageAmounts[d.stageLabel] || 0) + d.amount;\n});\n\n// At-risk deals (stuck stages only)\nconst atRiskDeals = deals.filter(d => d.isStuck);\nconst totalAtRisk = atRiskDeals.reduce((sum, d) => sum + d.amount, 0);\nconst atRiskDealIds = atRiskDeals.map(d => d.dealId);\n\nreturn [{\n  json: {\n    reportDate: new Date().toISOString().split('T')[0],\n    totalDeals: deals.length,\n    stageCounts,\n    stageAmounts,\n    totalAtRisk,\n    atRiskDealIds,\n    atRiskDeals: atRiskDeals.map(d => ({\n      dealId: d.dealId,\n      dealname: d.dealname,\n      amount: d.amount,\n      stageLabel: d.stageLabel,\n      daysStale: d.daysStale,\n      daysOverdue: d.daysOverdue,\n      isOverdue: d.isOverdue,\n      overdueTasks: d.overdueTasks\n    }))\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        -112
+      ],
+      "id": "259ab570-f86f-46e5-91a4-920bfa748832",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Report Date: {{ $json.reportDate }}\nTotal Deals: {{ $json.totalDeals }}\n\nStage Breakdown:\n{{ JSON.stringify($json.stageCounts, null, 2) }}\n\nAmounts by Stage:\n{{ JSON.stringify($json.stageAmounts, null, 2) }}\n\nTotal Amount at Risk: ${{ $json.totalAtRisk }}\n\nAt-Risk Deals to Investigate:\n{{ JSON.stringify($json.atRiskDeals, null, 2) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior sales analyst AI for an AI automation agency. \nYour job is to analyze the sales pipeline and generate a daily report.\n\nYou will receive:\n- Report date\n- Total deals count\n- Stage breakdown with counts and amounts\n- List of at-risk deals (in stages: Presentation Scheduled, Decision Maker Bought-In, Contract Sent)\n\nFor each at-risk deal, you MUST call the Get Deal tool using its dealId to retrieve full details before making any assessment. Do not skip this step.\n\nAfter investigating all at-risk deals, produce a structured report with:\n- Pipeline summary\n- Amount at risk\n- Per-deal analysis with specific recommendations\n- Priority actions for the sales team\n\nBe specific and actionable. Flag deals that are overdue or stale."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        -112
+      ],
+      "id": "f47941c4-5e40-444c-8e49-2e0e19014d73",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        160,
+        112
+      ],
+      "id": "7b2ee6ac-e8f7-4b5c-a1aa-1642d524d165",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "eDyYuAXLgm8MtLaj",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "deal",
+        "operation": "get",
+        "dealId": {
+          "__rl": true,
+          "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Deal_to_Get', ``, 'string') }}",
+          "mode": "id"
+        },
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.hubspotTool",
+      "typeVersion": 2.2,
+      "position": [
+        288,
+        112
+      ],
+      "id": "bd89fbc4-16fd-4407-9e58-3f56765eff94",
+      "name": "Get a deal in HubSpot",
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "CygJrPuZDNmb5yhy",
+          "name": "HubSpot App Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"reportDate\": {\n      \"type\": \"string\",\n      \"description\": \"Date of the report\"\n    },\n    \"summary\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"totalDeals\": { \"type\": \"number\" },\n        \"totalAtRisk\": { \"type\": \"number\" },\n        \"stageBreakdown\": {\n          \"type\": \"array\",\n          \"items\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"stage\": { \"type\": \"string\" },\n              \"count\": { \"type\": \"number\" },\n              \"amount\": { \"type\": \"number\" }\n            }\n          }\n        }\n      }\n    },\n    \"atRiskDeals\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"dealId\": { \"type\": \"number\" },\n          \"dealname\": { \"type\": \"string\" },\n          \"amount\": { \"type\": \"number\" },\n          \"stage\": { \"type\": \"string\" },\n          \"daysOverdue\": { \"type\": \"number\" },\n          \"problem\": { \"type\": \"string\" },\n          \"recommendation\": { \"type\": \"string\" },\n          \"priority\": {\n            \"type\": \"string\",\n            \"enum\": [\"urgent\", \"high\", \"medium\", \"low\"]\n          }\n        }\n      }\n    },\n    \"topPriorityActions\": {\n      \"type\": \"array\",\n      \"items\": { \"type\": \"string\" }\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        416,
+        112
+      ],
+      "id": "baee1af2-589e-4203-9b32-ba9e0ae000ca",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        752,
+        -112
+      ],
+      "id": "1f58c0ab-8fa9-449e-bf27-14bbeec4385d",
+      "name": "Send a text message",
+      "webhookId": "57e51d47-fe21-42f4-80f8-5aa9db4379b1",
+      "credentials": {
+        "telegramApi": {
+          "id": "JKgfROOpoltrp51Z",
+          "name": "Telegram Call Stat BOT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json.output;\n\nconst messages = [];\n\n// Message 1: Header + Pipeline Summary\nlet msg1 = `<b>📊 Daily Sales Report — ${data.reportDate}</b>\\n\\n`;\nmsg1 += `<b>Pipeline Overview</b>\\n`;\nmsg1 += `Total Deals: ${data.summary.totalDeals}\\n`;\nmsg1 += `💰 Total At Risk: $${(131000).toLocaleString()}\\n\\n`;\nmsg1 += `<b>Stage Breakdown:</b>\\n`;\nmsg1 += data.summary.stageBreakdown\n  .map(s => `• ${s.stage}: ${s.count} deals / $${s.amount.toLocaleString()}`)\n  .join('\\n');\nmessages.push({ json: { text: msg1 } });\n\n// Messages 2+: Deals (3 per message)\nconst deals = data.atRiskDeals;\nconst chunkSize = 3;\nfor (let i = 0; i < deals.length; i += chunkSize) {\n  const chunk = deals.slice(i, i + chunkSize);\n  const part = Math.floor(i / chunkSize) + 1;\n  const total = Math.ceil(deals.length / chunkSize);\n  \n  let msg = `<b>🚨 At-Risk Deals (Part ${part}/${total})</b>\\n\\n`;\n  msg += chunk.map(d =>\n    `<b>${d.priority.toUpperCase()} — ${d.dealname}</b>\\n` +\n    `💵 $${d.amount.toLocaleString()} | ${d.stage}\\n` +\n    `⚠️ ${d.problem}\\n` +\n    `✅ ${d.recommendation}`\n  ).join('\\n\\n');\n  messages.push({ json: { text: msg } });\n}\n\n// Last message: Priority Actions\nlet msgLast = `<b>🎯 Top Priority Actions:</b>\\n\\n`;\nmsgLast += data.topPriorityActions\n  .map((a, i) => `${i + 1}. ${a}`)\n  .join('\\n\\n');\nmessages.push({ json: { text: msgLast } });\n\nreturn messages;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -112
+      ],
+      "id": "57964adf-1c2b-482e-85b4-087a73a04ba1",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get many deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many deals": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a deal in HubSpot": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2765642a-f37c-488c-9cb2-681e71aafec5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5709068543c0156ebc2af82bf3cfdc1166307f992df9023f2d1b686ab12fa60d"
+  },
+  "id": "HDASR5lnnAbohSZx",
+  "tags": []
+}

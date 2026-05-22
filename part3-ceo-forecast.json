@@ -1,0 +1,261 @@
+{
+  "name": "3. CEO Forecast",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                5
+              ],
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        -160
+      ],
+      "id": "5b7a46f5-c94d-43b6-8b49-63270bbd9c71",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "id": "52d9e5e7-b722-42f2-9bf8-53f4046702bc",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_SHEET_ID",
+          "mode": "list",
+          "cachedResultName": "Deal Health Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -192,
+        -160
+      ],
+      "id": "3df058af-d47e-4978-a02e-771e9cbcacce",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "oDi6ORPTqHlbiIVZ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "deals",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        16,
+        -160
+      ],
+      "id": "5aed8497-c41b-4ad6-a0d1-13d1bb310904",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Today: {{ $now.toISODate() }}\n\nDeal Health Data (last 2 weeks):\n{{ JSON.stringify($json.deals, null, 2) }}\n\nProduce the weekly CEO forecast.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a strategic business analyst preparing a weekly executive briefing for the CEO of an AI automation agency.\n\nYour job is to analyze the Deal Health data from the past two weeks and produce a concise, strategic forecast.\n\nFocus on:\n- Overall pipeline health trend\n- Revenue at risk vs revenue likely to close\n- Pattern recognition across deals (common blockers, stage bottlenecks)\n- Strategic recommendations at the business level — not deal-by-deal\n\nTone: executive, concise, data-driven. No fluff."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        -160
+      ],
+      "id": "f92e3a61-1159-40c5-8484-2d1e3e7308d7",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        96,
+        48
+      ],
+      "id": "047e808d-6a7c-4bfb-b74f-2e7da09d1e37",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "eDyYuAXLgm8MtLaj",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"weekOf\": {\n      \"type\": \"string\"\n    },\n    \"pipelineHealth\": {\n      \"type\": \"string\",\n      \"enum\": [\"Healthy\", \"At Risk\", \"Critical\"]\n    },\n    \"forecastSummary\": {\n      \"type\": \"string\",\n      \"description\": \"3-4 sentence executive summary\"\n    },\n    \"revenueAtRisk\": {\n      \"type\": \"number\"\n    },\n    \"revenueLikelyToClose\": {\n      \"type\": \"number\"\n    },\n    \"topRisks\": {\n      \"type\": \"array\",\n      \"maxItems\": 3,\n      \"items\": { \"type\": \"string\" }\n    },\n    \"weeklyRecommendations\": {\n      \"type\": \"array\",\n      \"maxItems\": 3,\n      \"items\": { \"type\": \"string\" }\n    },\n    \"dealsTrend\": {\n      \"type\": \"string\",\n      \"description\": \"Improving, Stable or Declining\"\n    }\n  },\n  \"required\": [\"weekOf\", \"pipelineHealth\", \"forecastSummary\", \"revenueAtRisk\", \"revenueLikelyToClose\", \"topRisks\", \"weeklyRecommendations\", \"dealsTrend\"]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        48
+      ],
+      "id": "71ced577-6389-4339-87e2-a535d7a4616a",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=📊 <b>Weekly CEO Forecast — {{ $json.output.weekOf }}</b>\n\n{{ $json.output.pipelineHealth === 'Critical' ? '🔴' : $json.output.pipelineHealth === 'At Risk' ? '🟡' : '🟢' }} <b>Pipeline Health: {{ $json.output.pipelineHealth }}</b>\n📈 <b>Trend: {{ $json.output.dealsTrend }}</b>\n\n<b>Executive Summary:</b>\n{{ $json.output.forecastSummary }}\n\n<b>💰 Financial Outlook:</b>\n- Likely to Close: ${{ $json.output.revenueLikelyToClose.toLocaleString() }}\n- At Risk: ${{ $json.output.revenueAtRisk.toLocaleString() }}\n\n<b>🔥 Top 3 Risks:</b>\n{{ $json.output.topRisks.map((r, i) => `${i+1}. ${r}`).join('\\n') }}\n\n<b>🎯 Weekly Recommendations:</b>\n{{ $json.output.weeklyRecommendations.map((r, i) => `${i+1}. ${r}`).join('\\n') }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        576,
+        -160
+      ],
+      "id": "37a06cd9-93cd-40c2-afcf-0135012bdbe9",
+      "name": "Send a text message",
+      "webhookId": "57e51d47-fe21-42f4-80f8-5aa9db4379b1",
+      "credentials": {
+        "telegramApi": {
+          "id": "JKgfROOpoltrp51Z",
+          "name": "Telegram Call Stat BOT"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9912f43a-166e-4763-89ba-86a9281754a1",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5709068543c0156ebc2af82bf3cfdc1166307f992df9023f2d1b686ab12fa60d"
+  },
+  "id": "KI09FrTb0sVdEu8o",
+  "tags": []
+}

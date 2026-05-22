@@ -1,0 +1,97 @@
+{
+  "name": "2. Deal Health Alerts. Sub Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "dealId",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "26fac5cc-b5d8-49e2-a1f0-5ae705c7ffd4",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.hubapi.com/engagements/v1/engagements/associated/deal/{{ $json.dealId }}/paged",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "hubspotAppToken",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "31e08a01-4e1b-40c9-991b-1f48f48b1f5c",
+      "name": "HTTP Request",
+      "credentials": {
+        "hubspotAppToken": {
+          "id": "CygJrPuZDNmb5yhy",
+          "name": "HubSpot App Token account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = items[0]?.json?.results || [];\n\nconst notes = results\n  .filter(e => e.engagement?.type === 'NOTE')\n  .map(e => ({\n    type: 'NOTE',\n    body: e.metadata?.body || '',\n    createdAt: e.engagement?.createdAt || null\n  }));\n\nconst calls = results\n  .filter(e => e.engagement?.type === 'CALL')\n  .map(e => ({\n    type: 'CALL',\n    duration: e.metadata?.durationMilliseconds || 0,\n    status: e.metadata?.status || '',\n    body: e.metadata?.body || '',\n    createdAt: e.engagement?.createdAt || null\n  }));\n\nconst tasks = results\n  .filter(e => e.engagement?.type === 'TASK')\n  .map(e => ({\n    type: 'TASK',\n    subject: e.metadata?.subject || '',\n    status: e.metadata?.status || '',\n    body: e.metadata?.body || '',\n    createdAt: e.engagement?.createdAt || null\n  }));\n\nreturn [{\n  json: {\n    totalEngagements: results.length,\n    notes,\n    calls,\n    tasks\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "26d73f79-6c2a-4039-9a87-e27ab15ea7ce",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "27c31a65-b643-4b37-b324-47cc8b866873",
+  "meta": {
+    "instanceId": "5709068543c0156ebc2af82bf3cfdc1166307f992df9023f2d1b686ab12fa60d"
+  },
+  "id": "XFfAi2fxioiTT3oB",
+  "tags": []
+}
